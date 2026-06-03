@@ -1,0 +1,62 @@
+================================================================================
+          MEDICONNECT - FIREBASE REAL-TIME CLOUD SYNCHRONIZATION PLAN
+================================================================================
+
+1. OVERVIEW & OBJECTIVE
+--------------------------------------------------------------------------------
+The primary goal of this refactoring is to establish seamless, real-time database
+synchronization across the Doctor Portal, Patient Dashboard, and Profile screens
+using Firebase Realtime Database as the sole source of truth. 
+
+Previously, the app suffered from local data siloing because demographic details,
+prescriptions, and vitals updates were read/written exclusively to local
+SharedPreferences on each device. This refactor successfully transitions the app 
+to a synchronized, cloud-first architecture while retaining SharedPreferences 
+strictly for device-specific local patient ID caching.
+
+2. ARCHITECTURAL CHANGES & DATA FLOW
+--------------------------------------------------------------------------------
+- Database Persistence: Enabled Firebase Database local disk persistence via
+  'FirebaseDatabase.instance.setPersistenceEnabled(true)' inside lib/main.dart.
+  This provides native offline functionality, queuing write operations when offline
+  and executing them automatically upon reconnection.
+- Real-time Subscriptions: Stream subscriptions on '/patients' and '/patients/{id}'
+  have replaced old local polling/loading logic.
+- Low-Latency Updates: Directly stream and update node mutations.
+
+3. SUMMARY OF COMPONENT REFACTORINGS
+--------------------------------------------------------------------------------
+- lib/main.dart:
+  * Initialized Firebase Database and enabled offline disk persistence.
+  
+- lib/services/id_service.dart:
+  * Added Stream<List<Patient>> getPatientsStream() to stream the global registry.
+  * Added Future<Patient?> getPatientById(String id) to fetch a patient once.
+  * Added Stream<Patient?> getPatientStream(String id) to stream live patient details.
+  * Added updatePatientVitals(id, heartRate, bloodPressure) for real-time vital updates.
+  * Added addPatientPrescription(id, prescription) to atomically append prescriptions.
+  * Added updatePatientProfile(id, profileData) to push profile updates directly to Firebase.
+  * Windows Safe Execution: Used conditional optimistic writes on Windows to avoid
+    threading crashes during transactions.
+
+- lib/screens/doctor_screen.dart:
+  * Subscribed to IdService.getPatientsStream() so new patient registrations pop up instantly.
+  * Replaced local SharedPreferences storage with IdService.updatePatientVitals and
+    IdService.addPatientPrescription.
+
+- lib/screens/dashboard_screen.dart:
+  * Subscribed to live database stream under 'patients/{id}' for real-time vital and profile logs.
+  * Connected patient-side vital editing forms to write directly to Firebase.
+
+- lib/screens/profile_screen.dart:
+  * Transitioned both load and save actions to utilize Firebase Realtime Database.
+
+- lib/screens/home_screen.dart:
+  * Kept SharedPreferences strictly for local ID cache (enabling 'Continue as...' session restoration).
+  * Resolved details fetch to fetch live records from Firebase instead of local files.
+
+4. AUTOMATED TESTS & STATIC ANALYSIS
+--------------------------------------------------------------------------------
+- Test Suite: 'flutter test' runs and passes 100% of widget tests successfully.
+- Static Analysis: 'flutter analyze' runs with 0 errors and 0 warnings.
+================================================================================

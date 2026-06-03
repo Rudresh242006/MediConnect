@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "12644297251",
+    "firebase_url": "https://mediconnect-26-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "mediconnect-26",
+    "storage_bucket": "mediconnect-26.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:12644297251:android:67224f39998acf277e1f96",
+        "android_client_info": {
+          "package_name": "com.mediconnect.mediconnect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAS1txeJ0S3aH_JSZ3It4nsIoVIAFZThz4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
