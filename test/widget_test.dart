@@ -18,7 +18,7 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const MediConnectApp());
 
-    // Wait for the async patient-load in HomeScreen.initState to complete
+    // StartupScreen redirects to HomeScreen when no session is saved
     await tester.pumpAndSettle();
 
     // Verify that our home screen elements exist.

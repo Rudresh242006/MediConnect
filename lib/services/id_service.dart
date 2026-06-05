@@ -38,9 +38,12 @@ class IdService {
   // Singleton database instance — uses the databaseURL from FirebaseOptions
   static FirebaseDatabase get _db => FirebaseDatabase.instance;
 
-  // Returns true when we must avoid runTransaction (Windows desktop)
-  static bool get _isWindowsDesktop =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+  // Desktop plugins can invoke transaction callbacks off the UI thread and crash.
+  static bool get _useOptimisticIdSave =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.macOS);
 
   // ─────────────────────────────────────────────────────────────────────────
   // CORE LOGIC: incrementId
@@ -198,8 +201,8 @@ class IdService {
     required Map<String, dynamic> additionalData,
     required String label,          // 'Patient' or 'Doctor' (for logging)
   }) async {
-    if (_isWindowsDesktop) {
-      // Windows: runTransaction crashes due to a known plugin threading bug.
+    if (_useOptimisticIdSave) {
+      // Desktop: runTransaction can crash due to plugin threading issues.
       // Use optimistic locking instead: read → increment → set with retry.
       return _saveRecordOptimistic(
         node: node,

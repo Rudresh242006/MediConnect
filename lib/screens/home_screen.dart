@@ -1,91 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import '../main.dart';
-import '../models/patient.dart';
-import '../services/id_service.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  Patient? _lastPatient;
-  bool _isCheckingPatient = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLastPatient();
-  }
-
-  Future<void> _loadLastPatient() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      // 1. Check if a doctor is logged in
-      final doctorId = prefs.getString('logged_in_doctor_id');
-      if (doctorId != null && doctorId.isNotEmpty && mounted) {
-        Navigator.pushReplacementNamed(context, '/doctor');
-        return;
-      }
-
-      // 2. Check if a patient is logged in
-      final activePatientId = prefs.getString('active_patient_id');
-      if (activePatientId != null && activePatientId.isNotEmpty && mounted) {
-        final patientsJson = prefs.getStringList('registered_patients') ?? [];
-        Patient? loggedInPatient;
-        for (var pj in patientsJson) {
-          try {
-            final pMap = jsonDecode(pj) as Map<String, dynamic>;
-            if (pMap['id'] == activePatientId) {
-              loggedInPatient = Patient.fromJson(pMap);
-              break;
-            }
-          } catch (_) {}
-        }
-        if (loggedInPatient != null) {
-          Navigator.pushReplacementNamed(
-            context,
-            '/dashboard',
-            arguments: loggedInPatient,
-          );
-          return;
-        }
-      }
-
-      // 3. Normal flow: Load last registered patient preview card
-      final patientsJson = prefs.getStringList('registered_patients') ?? [];
-      if (patientsJson.isNotEmpty) {
-        final lastMap = jsonDecode(patientsJson.last) as Map<String, dynamic>;
-        final localPatient = Patient.fromJson(lastMap);
-        
-        setState(() {
-          _lastPatient = localPatient;
-        });
-
-        final cloudPatient = await IdService.getPatientById(localPatient.id);
-        if (cloudPatient != null && mounted) {
-          setState(() {
-            _lastPatient = cloudPatient;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading last patient or redirecting: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isCheckingPatient = false);
-      }
-    }
-  }
 
   void _showDoctorPortal(BuildContext context) {
     Navigator.pushNamed(context, '/doctor-login');
+  }
+
+  void _openPatientPortal(BuildContext context) {
+    Navigator.pushNamed(context, '/patient-login');
   }
 
   @override
@@ -230,89 +155,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.3, end: 0, curve: Curves.easeOutCubic),
                   const SizedBox(height: 40),
 
-                  // === "Enter Patient Portal" quick access if profile exists ===
-                  if (!_isCheckingPatient && _lastPatient != null) ...[
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () async {
-                          final prefs = await SharedPreferences.getInstance();
-                          await prefs.setString('active_patient_id', _lastPatient!.id);
-                          if (context.mounted) {
-                            Navigator.pushNamed(
-                              context,
-                              '/dashboard',
-                              arguments: _lastPatient,
-                            ).then((_) {
-                              _loadLastPatient();
-                            });
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: isDark
-                                  ? [const Color(0xFF312E81), const Color(0xFF1E1B4B)]
-                                  : [const Color(0xFF4F46E5), const Color(0xFF6366F1)],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF4F46E5).withOpacity(0.3),
-                                blurRadius: 16,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 22,
-                                backgroundColor: Colors.white.withOpacity(0.15),
-                                child: Text(
-                                  _lastPatient!.fullName.isNotEmpty
-                                      ? _lastPatient!.fullName[0].toUpperCase()
-                                      : 'P',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Continue as',
-                                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                                    ),
-                                    Text(
-                                      _lastPatient!.fullName,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white70, size: 14),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ).animate().fadeIn(delay: 450.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutCubic),
-                    const SizedBox(height: 16),
-                  ],
-
                   // Portal Selection Section Title
                   Align(
                     alignment: Alignment.centerLeft,
@@ -332,12 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/register').then((_) {
-                          // Refresh patient data when returning from registration
-                          _loadLastPatient();
-                        });
-                      },
+                      onTap: () => _openPatientPortal(context),
                       borderRadius: BorderRadius.circular(24.0),
                       child: Container(
                         padding: const EdgeInsets.all(22.0),
@@ -389,9 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    _lastPatient != null
-                                        ? 'Register new patient or switch profile'
-                                        : 'Register, view digital card, track medical history',
+                                    'Login with Patient ID or register',
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade500,
@@ -471,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Manage patients, prescribe, review diagnostics',
+                                    'Login with Doctor ID or register',
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade500,

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import '../models/patient.dart';
 import '../services/id_service.dart';
+import '../services/session_service.dart';
 import '../main.dart';
 
 class DoctorScreen extends StatefulWidget {
@@ -103,7 +104,7 @@ class _DoctorScreenState extends State<DoctorScreen> {
 
   // ── Logout ────────────────────────────────────────────────────────────────
 
-  Future<void> _logout(BuildContext context) async {
+  Future<void> _returnHome(BuildContext context) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -111,14 +112,14 @@ class _DoctorScreenState extends State<DoctorScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         title: Text(
-          'Logout?',
+          'Return to home?',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: isDark ? Colors.white : const Color(0xFF1E293B),
           ),
         ),
         content: Text(
-          'Are you sure you want to log out of the Doctor Portal?',
+          'You will be logged out. To use the app again, choose Patient or Doctor on the home screen.',
           style: TextStyle(
             color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600,
             height: 1.4,
@@ -143,7 +144,7 @@ class _DoctorScreenState extends State<DoctorScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Logout',
+            child: const Text('Log out & go home',
                 style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
@@ -151,10 +152,7 @@ class _DoctorScreenState extends State<DoctorScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('logged_in_doctor_id');
-      await prefs.remove('logged_in_doctor_name');
-      await prefs.remove('logged_in_doctor_license');
+      await SessionService.clearDoctorSession();
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
       }
@@ -203,7 +201,37 @@ class _DoctorScreenState extends State<DoctorScreen> {
 
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
+      builder: (ctx) {
+        Future<void> savePrescription() async {
+          if (medCtrl.text.trim().isEmpty) return;
+          final days = daysCtrl.text.trim();
+          final rx = {
+            'medication': medCtrl.text.trim(),
+            'dosage': dosageCtrl.text.trim(),
+            'instruction': instrCtrl.text.trim(),
+            'timeLeft': days.isNotEmpty ? '$days days left' : 'Ongoing',
+          };
+          try {
+            await IdService.addPatientPrescription(patient.id, rx);
+            if (ctx.mounted) Navigator.pop(ctx);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Prescription added successfully!'),
+                  backgroundColor: const Color(0xFF10B981),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              );
+            }
+          } catch (e) {
+            debugPrint('Error saving prescription: $e');
+          }
+        }
+
+        return Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         child: SingleChildScrollView(
@@ -249,17 +277,43 @@ class _DoctorScreenState extends State<DoctorScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              _dlgField(ctx, isDark, medCtrl, 'Medication Name',
-                  'e.g. Amoxicillin 500mg'),
+              _dlgField(
+                ctx,
+                isDark,
+                medCtrl,
+                'Medication Name',
+                'e.g. Amoxicillin 500mg',
+                onSubmitted: (_) => FocusScope.of(ctx).nextFocus(),
+              ),
               const SizedBox(height: 12),
-              _dlgField(ctx, isDark, dosageCtrl, 'Dosage',
-                  'e.g. 1 Capsule – 3× Daily'),
+              _dlgField(
+                ctx,
+                isDark,
+                dosageCtrl,
+                'Dosage',
+                'e.g. 1 Capsule – 3× Daily',
+                onSubmitted: (_) => FocusScope.of(ctx).nextFocus(),
+              ),
               const SizedBox(height: 12),
-              _dlgField(ctx, isDark, instrCtrl, 'Instructions',
-                  'e.g. Take with food'),
+              _dlgField(
+                ctx,
+                isDark,
+                instrCtrl,
+                'Instructions',
+                'e.g. Take with food',
+                onSubmitted: (_) => FocusScope.of(ctx).nextFocus(),
+              ),
               const SizedBox(height: 12),
-              _dlgField(ctx, isDark, daysCtrl, 'Duration (days)', 'e.g. 7',
-                  inputType: TextInputType.number),
+              _dlgField(
+                ctx,
+                isDark,
+                daysCtrl,
+                'Duration (days)',
+                'e.g. 7',
+                inputType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => savePrescription(),
+              ),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -276,37 +330,7 @@ class _DoctorScreenState extends State<DoctorScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () async {
-                        if (medCtrl.text.trim().isEmpty) return;
-                        final days = daysCtrl.text.trim();
-                        final rx = {
-                          'medication': medCtrl.text.trim(),
-                          'dosage': dosageCtrl.text.trim(),
-                          'instruction': instrCtrl.text.trim(),
-                          'timeLeft': days.isNotEmpty
-                              ? '$days days left'
-                              : 'Ongoing',
-                        };
-                        try {
-                          await IdService.addPatientPrescription(
-                              patient.id, rx);
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text(
-                                    'Prescription added successfully!'),
-                                backgroundColor: const Color(0xFF10B981),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          debugPrint('Error saving prescription: $e');
-                        }
-                      },
+                      onPressed: savePrescription,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0D9488),
                         foregroundColor: Colors.white,
@@ -323,7 +347,8 @@ class _DoctorScreenState extends State<DoctorScreen> {
             ],
           ),
         ),
-      ),
+      );
+      },
     );
   }
 
@@ -338,7 +363,43 @@ class _DoctorScreenState extends State<DoctorScreen> {
 
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
+      builder: (ctx) {
+        Future<void> saveVitals() async {
+          final hr = int.tryParse(hrCtrl.text.trim());
+          final bp = bpCtrl.text.trim();
+          if (hr == null || hr < 20 || hr > 300) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Invalid heart rate')),
+            );
+            return;
+          }
+          if (!RegExp(r'^\d{2,3}\/\d{2,3}$').hasMatch(bp)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Use format Systolic/Diastolic')),
+            );
+            return;
+          }
+          try {
+            await IdService.updatePatientVitals(patient.id, hr, bp);
+            if (ctx.mounted) Navigator.pop(ctx);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Vitals updated successfully!'),
+                  backgroundColor: const Color(0xFF10B981),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              );
+            }
+          } catch (e) {
+            debugPrint('Error updating vitals: $e');
+          }
+        }
+
+        return Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         child: Padding(
@@ -378,11 +439,25 @@ class _DoctorScreenState extends State<DoctorScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              _dlgField(ctx, isDark, hrCtrl, 'Heart Rate (bpm)', '60–100',
-                  inputType: TextInputType.number),
+              _dlgField(
+                ctx,
+                isDark,
+                hrCtrl,
+                'Heart Rate (bpm)',
+                '60–100',
+                inputType: TextInputType.number,
+                onSubmitted: (_) => FocusScope.of(ctx).nextFocus(),
+              ),
               const SizedBox(height: 12),
               _dlgField(
-                  ctx, isDark, bpCtrl, 'Blood Pressure', 'e.g. 120/80'),
+                ctx,
+                isDark,
+                bpCtrl,
+                'Blood Pressure',
+                'e.g. 120/80',
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => saveVitals(),
+              ),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -399,45 +474,7 @@ class _DoctorScreenState extends State<DoctorScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () async {
-                        final hr = int.tryParse(hrCtrl.text.trim());
-                        final bp = bpCtrl.text.trim();
-                        if (hr == null || hr < 20 || hr > 300) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Invalid heart rate')),
-                          );
-                          return;
-                        }
-                        if (!RegExp(r'^\d{2,3}\/\d{2,3}$').hasMatch(bp)) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text(
-                                    'Use format Systolic/Diastolic')),
-                          );
-                          return;
-                        }
-                        try {
-                          await IdService.updatePatientVitals(
-                              patient.id, hr, bp);
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text(
-                                    'Vitals updated successfully!'),
-                                backgroundColor: const Color(0xFF10B981),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(12)),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          debugPrint('Error updating vitals: $e');
-                        }
-                      },
+                      onPressed: saveVitals,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFF43F5E),
                         foregroundColor: Colors.white,
@@ -454,16 +491,28 @@ class _DoctorScreenState extends State<DoctorScreen> {
             ],
           ),
         ),
-      ),
+      );
+      },
     );
   }
 
-  Widget _dlgField(BuildContext ctx, bool isDark,
-      TextEditingController ctrl, String label, String hint,
-      {TextInputType inputType = TextInputType.text}) {
+  Widget _dlgField(
+    BuildContext ctx,
+    bool isDark,
+    TextEditingController ctrl,
+    String label,
+    String hint, {
+    TextInputType inputType = TextInputType.text,
+    FocusNode? focusNode,
+    TextInputAction textInputAction = TextInputAction.next,
+    void Function(String)? onSubmitted,
+  }) {
     return TextField(
       controller: ctrl,
+      focusNode: focusNode,
       keyboardType: inputType,
+      textInputAction: textInputAction,
+      onSubmitted: onSubmitted,
       style: TextStyle(
           color: isDark ? Colors.white : const Color(0xFF1E293B)),
       decoration: InputDecoration(
@@ -505,7 +554,9 @@ class _DoctorScreenState extends State<DoctorScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor:
           isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
       body: NestedScrollView(
@@ -539,14 +590,14 @@ class _DoctorScreenState extends State<DoctorScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Top row: back + theme toggle + logout
+                    // Top row: home + theme toggle
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.arrow_back_ios_rounded,
-                              color: Colors.white, size: 20),
-                          onPressed: () => _logout(context),
-                          tooltip: 'Logout',
+                          icon: const Icon(Icons.home_rounded,
+                              color: Colors.white, size: 24),
+                          onPressed: () => _returnHome(context),
+                          tooltip: 'Home (log out)',
                         ),
                         const Spacer(),
                         IconButton(
@@ -560,8 +611,6 @@ class _DoctorScreenState extends State<DoctorScreen> {
                           onPressed: () =>
                               MediConnectApp.of(context)?.toggleTheme(),
                         ),
-                        const SizedBox(width: 4),
-                        _logoutButton(context, isDark),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -694,6 +743,7 @@ class _DoctorScreenState extends State<DoctorScreen> {
                     ? _buildNoResultsState(isDark)
                     : _buildPatientList(isDark),
       ),
+    ),
     );
   }
 
@@ -1043,32 +1093,6 @@ class _DoctorScreenState extends State<DoctorScreen> {
   }
 
   // ── Small reusable widgets ────────────────────────────────────────────────
-
-  Widget _logoutButton(BuildContext context, bool isDark) {
-    return GestureDetector(
-      onTap: () => _logout(context),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.logout_rounded, color: Colors.white, size: 14),
-            SizedBox(width: 6),
-            Text('Logout',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold)),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _vitalChip(bool isDark, String text, String label, Color color) {
     return Container(

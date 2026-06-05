@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/patient.dart';
 import '../services/id_service.dart';
+import '../services/session_service.dart';
 import '../main.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -60,7 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _logout(BuildContext context) async {
+  Future<void> _returnHome(BuildContext context) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -68,14 +69,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         title: Text(
-          'Logout?',
+          'Return to home?',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: isDark ? Colors.white : const Color(0xFF1E293B),
           ),
         ),
         content: Text(
-          'Are you sure you want to log out of the Patient Portal?',
+          'You will be logged out. To use the app again, choose Patient or Doctor on the home screen.',
           style: TextStyle(
             color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600,
             height: 1.4,
@@ -100,7 +101,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Logout',
+            child: const Text('Log out & go home',
                 style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
@@ -108,8 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('active_patient_id');
+      await SessionService.clearPatientSession();
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
       }
@@ -280,6 +280,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await showDialog(
       context: context,
       builder: (ctx) {
+        Future<void> saveVitals() async {
+          final hr = int.tryParse(hrController.text.trim());
+          final bp = bpController.text.trim();
+          if (hr == null || hr < 20 || hr > 300) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Invalid heart rate value')),
+            );
+            return;
+          }
+          if (!RegExp(r'^\d{2,3}\/\d{2,3}$').hasMatch(bp)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Invalid BP format. Use Systolic/Diastolic'),
+              ),
+            );
+            return;
+          }
+          try {
+            await IdService.updatePatientVitals(_patient!.id, hr, bp);
+            if (ctx.mounted) Navigator.pop(ctx);
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Vitals updated!'),
+                backgroundColor:
+                    isDark ? const Color(0xFF14B8A6) : Colors.teal.shade600,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+          } catch (e) {
+            debugPrint('Error saving updated vitals: $e');
+          }
+        }
+
         return Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -297,9 +334,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                _buildVitalsField(ctx, isDark, hrController, 'Heart Rate (bpm)', '60-100', TextInputType.number),
+                _buildVitalsField(
+                  ctx,
+                  isDark,
+                  hrController,
+                  'Heart Rate (bpm)',
+                  '60-100',
+                  inputType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => FocusScope.of(ctx).nextFocus(),
+                ),
                 const SizedBox(height: 14),
-                _buildVitalsField(ctx, isDark, bpController, 'Blood Pressure', 'e.g. 120/80'),
+                _buildVitalsField(
+                  ctx,
+                  isDark,
+                  bpController,
+                  'Blood Pressure',
+                  'e.g. 120/80',
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => saveVitals(),
+                ),
                 const SizedBox(height: 24),
                 Row(
                   children: [
@@ -312,38 +366,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () async {
-                          final hr = int.tryParse(hrController.text.trim());
-                          final bp = bpController.text.trim();
-                          if (hr == null || hr < 20 || hr > 300) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Invalid heart rate value')),
-                            );
-                            return;
-                          }
-                          if (!RegExp(r'^\d{2,3}\/\d{2,3}$').hasMatch(bp)) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Invalid BP format. Use Systolic/Diastolic')),
-                            );
-                            return;
-                          }
-                          
-                          try {
-                            await IdService.updatePatientVitals(_patient!.id, hr, bp);
-                            if (ctx.mounted) Navigator.pop(ctx);
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Vitals updated!'),
-                                backgroundColor: isDark ? const Color(0xFF14B8A6) : Colors.teal.shade600,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            );
-                          } catch (e) {
-                            debugPrint('Error saving updated vitals: $e');
-                          }
-                        },
+                        onPressed: saveVitals,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
                           foregroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
@@ -363,10 +386,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildVitalsField(BuildContext ctx, bool isDark, TextEditingController ctrl, String label, String hint, [TextInputType? inputType]) {
+  Widget _buildVitalsField(
+    BuildContext ctx,
+    bool isDark,
+    TextEditingController ctrl,
+    String label,
+    String hint, {
+    TextInputType? inputType,
+    TextInputAction textInputAction = TextInputAction.next,
+    void Function(String)? onSubmitted,
+  }) {
     return TextField(
       controller: ctrl,
       keyboardType: inputType ?? TextInputType.text,
+      textInputAction: textInputAction,
+      onSubmitted: onSubmitted,
       style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
       decoration: InputDecoration(
         labelText: label,
@@ -425,7 +459,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
+                onPressed: () => _returnHome(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
                   foregroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
@@ -458,7 +492,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Check if any vital is abnormal (Heart rate or Blood pressure)
     final bool anyAlert = hrClass['color'] != const Color(0xFF10B981) || bpClass['color'] != const Color(0xFF10B981);
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(
@@ -492,10 +528,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           IconButton(
             icon: Icon(Icons.home_rounded, color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5), size: 24),
-            tooltip: 'Home',
-            onPressed: () {
-              Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-            },
+            tooltip: 'Home (log out)',
+            onPressed: () => _returnHome(context),
           ),
           const SizedBox(width: 12),
         ],
@@ -804,6 +838,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 

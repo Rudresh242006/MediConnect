@@ -4,6 +4,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/id_service.dart';
 import '../main.dart';
+import '../utils/form_scroll_helper.dart';
+import '../utils/form_enter_navigation.dart';
+import '../utils/prefixed_id_formatter.dart';
 
 /// Doctor Login/Registration Screen
 ///
@@ -36,12 +39,33 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
   final _regExpController = TextEditingController();
   String? _selectedGender;
   String? _selectedDepartment;
+  bool _showRegGenderError = false;
   int _regStep = 0; // 0 = personal, 1 = professional
+
+  final _regScrollController = ScrollController();
+  final _regNameFieldKey = GlobalKey<FormFieldState<String>>();
+  final _regPhoneFieldKey = GlobalKey<FormFieldState<String>>();
+  final _regEmailFieldKey = GlobalKey<FormFieldState<String>>();
+  final _regGenderSectionKey = GlobalKey();
+  final _regLicenseFieldKey = GlobalKey<FormFieldState<String>>();
+  final _regDeptFieldKey = GlobalKey<FormFieldState<String>>();
+  final _regSpecFieldKey = GlobalKey<FormFieldState<String>>();
+  final _regHospitalFieldKey = GlobalKey<FormFieldState<String>>();
+  final _regExpFieldKey = GlobalKey<FormFieldState<String>>();
 
   // ── Login fields ─────────────────────────────────────────────────────────
   final _loginFormKey = GlobalKey<FormState>();
   final _loginIdController = TextEditingController();
   final _loginLicenseController = TextEditingController();
+  final _loginIdFocus = FocusNode();
+  final _loginLicenseFocus = FocusNode();
+  final _regNameFocus = FocusNode();
+  final _regPhoneFocus = FocusNode();
+  final _regEmailFocus = FocusNode();
+  final _regLicenseFocus = FocusNode();
+  final _regSpecFocus = FocusNode();
+  final _regHospitalFocus = FocusNode();
+  final _regExpFocus = FocusNode();
 
   final List<String> _departments = [
     'General Medicine',
@@ -66,10 +90,13 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
     'Rheumatology',
   ];
 
+  static const _doctorIdPrefix = 'D-';
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loginIdController.text = _doctorIdPrefix;
   }
 
   @override
@@ -84,7 +111,23 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
     _regExpController.dispose();
     _loginIdController.dispose();
     _loginLicenseController.dispose();
+    _loginIdFocus.dispose();
+    _loginLicenseFocus.dispose();
+    _regNameFocus.dispose();
+    _regPhoneFocus.dispose();
+    _regEmailFocus.dispose();
+    _regLicenseFocus.dispose();
+    _regSpecFocus.dispose();
+    _regHospitalFocus.dispose();
+    _regExpFocus.dispose();
+    _regScrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _advanceRegStep() async {
+    if (await _validateRegStep()) {
+      setState(() => _regStep = 1);
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -152,26 +195,43 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
 
   // ── REGISTRATION ─────────────────────────────────────────────────────────
 
-  bool _validateRegStep() {
+  Future<bool> _validateRegStep() async {
+    _regFormKey.currentState!.validate();
+
     if (_regStep == 0) {
-      final ok = _regFormKey.currentState!.validate();
+      if (await FormScrollHelper.scrollToFirstInvalidField([
+        _regNameFieldKey,
+        _regPhoneFieldKey,
+        _regEmailFieldKey,
+      ])) {
+        return false;
+      }
+      setState(() => _showRegGenderError = _selectedGender == null);
       if (_selectedGender == null) {
-        _showSnack('Please select your gender');
+        await FormScrollHelper.reveal(_regGenderSectionKey);
         return false;
       }
-      return ok;
-    } else {
-      final ok = _regFormKey.currentState!.validate();
-      if (_selectedDepartment == null) {
-        _showSnack('Please select your department / specialization');
-        return false;
-      }
-      return ok;
+      return true;
     }
+
+    if (await FormScrollHelper.scrollToFirstInvalidField([
+      _regLicenseFieldKey,
+      _regDeptFieldKey,
+      _regSpecFieldKey,
+      _regHospitalFieldKey,
+      _regExpFieldKey,
+    ])) {
+      return false;
+    }
+    if (_selectedDepartment == null) {
+      await FormScrollHelper.reveal(_regDeptFieldKey);
+      return false;
+    }
+    return true;
   }
 
   Future<void> _handleRegister() async {
-    if (!_validateRegStep()) return;
+    if (!await _validateRegStep()) return;
 
     setState(() => _isLoading = true);
     FocusScope.of(context).unfocus();
@@ -430,20 +490,22 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
             // Doctor ID field
             TextFormField(
               controller: _loginIdController,
+              focusNode: _loginIdFocus,
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) =>
+                  FormEnterNavigation.focusNext(context, _loginLicenseFocus),
               style: TextStyle(
                   color: isDark ? Colors.white : const Color(0xFF1E293B),
                   letterSpacing: 1.5,
                   fontWeight: FontWeight.bold),
-              textCapitalization: TextCapitalization.characters,
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-]')),
-                LengthLimitingTextInputFormatter(12),
+                PrefixedIdTextInputFormatter(prefix: _doctorIdPrefix),
               ],
               decoration: _inp(
                 context,
                 'Doctor ID *',
                 Icons.badge_outlined,
-                hint: 'e.g. D-A0A0A0A0A1',
+                hint: 'D-A0A0A0A0A1',
               ),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) {
@@ -461,10 +523,16 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
             // License Number field
             TextFormField(
               controller: _loginLicenseController,
+              focusNode: _loginLicenseFocus,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => FormEnterNavigation.onFieldDone(
+                context,
+                onSubmit: () => _handleLogin(),
+              ),
               style: TextStyle(
                   color: isDark ? Colors.white : const Color(0xFF1E293B),
                   letterSpacing: 1.2),
-              textCapitalization: TextCapitalization.characters,
+              inputFormatters: [UpperCaseTextFormatter()],
               decoration: _inp(
                 context,
                 'Medical License Number *',
@@ -580,6 +648,7 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
         // Form content
         Expanded(
           child: SingleChildScrollView(
+            controller: _regScrollController,
             physics: const BouncingScrollPhysics(),
             padding:
                 const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -665,8 +734,13 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
 
         // Full Name
         TextFormField(
+          key: _regNameFieldKey,
           controller: _regNameController,
+          focusNode: _regNameFocus,
           keyboardType: TextInputType.name,
+          textInputAction: TextInputAction.next,
+          onFieldSubmitted: (_) =>
+              FormEnterNavigation.focusNext(context, _regPhoneFocus),
           textCapitalization: TextCapitalization.words,
           style: TextStyle(
               color: isDark ? Colors.white : const Color(0xFF1E293B)),
@@ -685,8 +759,13 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
 
         // Phone
         TextFormField(
+          key: _regPhoneFieldKey,
           controller: _regPhoneController,
+          focusNode: _regPhoneFocus,
           keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.next,
+          onFieldSubmitted: (_) =>
+              FormEnterNavigation.focusNext(context, _regEmailFocus),
           style: TextStyle(
               color: isDark ? Colors.white : const Color(0xFF1E293B)),
           inputFormatters: [
@@ -706,8 +785,15 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
 
         // Email
         TextFormField(
+          key: _regEmailFieldKey,
           controller: _regEmailController,
+          focusNode: _regEmailFocus,
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => FormEnterNavigation.onFieldDone(
+            context,
+            onSubmit: () => _advanceRegStep(),
+          ),
           style: TextStyle(
               color: isDark ? Colors.white : const Color(0xFF1E293B)),
           decoration: _inp(context, 'Email Address *', Icons.email_rounded,
@@ -724,14 +810,22 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
         const SizedBox(height: 20),
 
         // Gender selector
-        _sectionHeader(isDark, 'GENDER', Icons.wc_rounded),
-        const SizedBox(height: 10),
-        Row(
+        KeyedSubtree(
+          key: _regGenderSectionKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(isDark, 'GENDER', Icons.wc_rounded),
+              const SizedBox(height: 10),
+              Row(
           children: ['Male', 'Female', 'Other'].map((g) {
             final selected = _selectedGender == g;
             return Expanded(
               child: GestureDetector(
-                onTap: () => setState(() => _selectedGender = g),
+                onTap: () => setState(() {
+                  _selectedGender = g;
+                  _showRegGenderError = false;
+                }),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   margin: const EdgeInsets.only(right: 8),
@@ -769,6 +863,21 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
               ),
             );
           }).toList(),
+        ),
+              if (_showRegGenderError)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 4),
+                  child: Text(
+                    'Please select your gender',
+                    style: TextStyle(
+                      color: Colors.red.shade600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ).animate().fadeIn(delay: 280.ms),
         const SizedBox(height: 32),
       ],
@@ -785,8 +894,13 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
 
         // License Number
         TextFormField(
+          key: _regLicenseFieldKey,
           controller: _regLicenseController,
+          focusNode: _regLicenseFocus,
           textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.next,
+          onFieldSubmitted: (_) =>
+              FormEnterNavigation.focusNext(context, _regSpecFocus),
           style: TextStyle(
               color: isDark ? Colors.white : const Color(0xFF1E293B),
               letterSpacing: 1.2),
@@ -807,6 +921,7 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
 
         // Department dropdown
         DropdownButtonFormField<String>(
+          key: _regDeptFieldKey,
           value: _selectedDepartment,
           decoration: _inp(context, 'Department / Specialization *',
               Icons.local_hospital_outlined),
@@ -829,9 +944,14 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
 
         // Specialization (sub-specialty / title)
         TextFormField(
+          key: _regSpecFieldKey,
           controller: _regSpecController,
+          focusNode: _regSpecFocus,
           keyboardType: TextInputType.text,
           textCapitalization: TextCapitalization.words,
+          textInputAction: TextInputAction.next,
+          onFieldSubmitted: (_) =>
+              FormEnterNavigation.focusNext(context, _regHospitalFocus),
           style: TextStyle(
               color: isDark ? Colors.white : const Color(0xFF1E293B)),
           decoration: _inp(context, 'Sub-specialty / Designation *',
@@ -848,9 +968,14 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
 
         // Hospital
         TextFormField(
+          key: _regHospitalFieldKey,
           controller: _regHospitalController,
+          focusNode: _regHospitalFocus,
           keyboardType: TextInputType.text,
           textCapitalization: TextCapitalization.words,
+          textInputAction: TextInputAction.next,
+          onFieldSubmitted: (_) =>
+              FormEnterNavigation.focusNext(context, _regExpFocus),
           style: TextStyle(
               color: isDark ? Colors.white : const Color(0xFF1E293B)),
           decoration: _inp(context, 'Hospital / Clinic Name *',
@@ -867,8 +992,15 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
 
         // Years of experience
         TextFormField(
+          key: _regExpFieldKey,
           controller: _regExpController,
+          focusNode: _regExpFocus,
           keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => FormEnterNavigation.onFieldDone(
+            context,
+            onSubmit: () => _handleRegister(),
+          ),
           style: TextStyle(
               color: isDark ? Colors.white : const Color(0xFF1E293B)),
           inputFormatters: [
@@ -937,13 +1069,13 @@ class _DoctorLoginScreenState extends State<DoctorLoginScreen>
             child: ElevatedButton(
               onPressed: _isLoading
                   ? null
-                  : () {
+                  : () async {
                       if (_regStep == 0) {
-                        if (_validateRegStep()) {
+                        if (await _validateRegStep()) {
                           setState(() => _regStep = 1);
                         }
                       } else {
-                        _handleRegister();
+                        await _handleRegister();
                       }
                     },
               style: ElevatedButton.styleFrom(

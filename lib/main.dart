@@ -1,14 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'screens/home_screen.dart';
+import 'screens/startup_screen.dart';
 import 'screens/registration_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/doctor_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/doctor_login_screen.dart';
+import 'screens/patient_login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,10 +19,15 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    try {
-      FirebaseDatabase.instance.setPersistenceEnabled(true);
-    } catch (e) {
-      debugPrint('Error enabling Firebase Database persistence: $e');
+    // Offline persistence is supported on Android/iOS only (not web/desktop).
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
+      try {
+        FirebaseDatabase.instance.setPersistenceEnabled(true);
+      } catch (e) {
+        debugPrint('Error enabling Firebase Database persistence: $e');
+      }
     }
   } catch (e, stack) {
     debugPrint('❌ FATAL: Firebase initialization failed: $e');
@@ -197,13 +205,15 @@ class _MediConnectAppState extends State<MediConnectApp> {
         ),
       ),
       
-      initialRoute: '/',
+      initialRoute: '/startup',
       routes: {
+        '/startup': (context) => const StartupScreen(),
         '/': (context) => const HomeScreen(),
         '/register': (context) => const RegistrationScreen(),
         '/dashboard': (context) => const DashboardScreen(),
         '/doctor': (context) => const DoctorScreen(),
         '/doctor-login': (context) => const DoctorLoginScreen(),
+        '/patient-login': (context) => const PatientLoginScreen(),
         '/profile': (context) => const ProfileScreen(),
       },
     );

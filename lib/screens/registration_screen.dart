@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/patient.dart';
 import '../services/id_service.dart';
 import '../widgets/success_dialog.dart';
+import '../utils/form_enter_navigation.dart';
+import '../utils/form_scroll_helper.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -40,6 +42,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _emergencyNameController = TextEditingController();
   final _emergencyPhoneController = TextEditingController();
   String? _selectedEmergencyRelation;
+  bool _showRelationError = false;
 
   // Clinical: Allergies
   final List<String> _commonAllergens = [
@@ -81,11 +84,29 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _emergPhoneFocus = FocusNode();
   final _hrFocus = FocusNode();
   final _bpFocus = FocusNode();
+  final _customAllergyFocus = FocusNode();
 
-  // Advance to next step (called by Enter key on last field of each step)
-  void _advanceStep() {
+  final _scrollController = ScrollController();
+  final _dobDisplayController = TextEditingController();
+
+  final _nameFieldKey = GlobalKey<FormFieldState<String>>();
+  final _dobFieldKey = GlobalKey<FormFieldState<String>>();
+  final _heightFieldKey = GlobalKey<FormFieldState<String>>();
+  final _weightFieldKey = GlobalKey<FormFieldState<String>>();
+  final _genderSectionKey = GlobalKey();
+  final _bloodGroupSectionKey = GlobalKey();
+  final _phoneFieldKey = GlobalKey<FormFieldState<String>>();
+  final _emailFieldKey = GlobalKey<FormFieldState<String>>();
+  final _addressFieldKey = GlobalKey<FormFieldState<String>>();
+  final _emergNameFieldKey = GlobalKey<FormFieldState<String>>();
+  final _emergPhoneFieldKey = GlobalKey<FormFieldState<String>>();
+  final _relationSectionKey = GlobalKey();
+  final _hrFieldKey = GlobalKey<FormFieldState<String>>();
+  final _bpFieldKey = GlobalKey<FormFieldState<String>>();
+
+  Future<void> _advanceStep() async {
     if (_currentStep < _totalSteps - 1) {
-      if (_validateCurrentStep()) setState(() => _currentStep++);
+      if (await _validateCurrentStep()) setState(() => _currentStep++);
     } else {
       _handleRegistration();
     }
@@ -114,6 +135,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _emergPhoneFocus.dispose();
     _hrFocus.dispose();
     _bpFocus.dispose();
+    _customAllergyFocus.dispose();
+    _scrollController.dispose();
+    _dobDisplayController.dispose();
     super.dispose();
   }
 
@@ -164,27 +188,59 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     return result ?? false;
   }
 
-  bool _validateCurrentStep() {
+  Future<bool> _validateCurrentStep() async {
+    _formKey.currentState!.validate();
+
     switch (_currentStep) {
-      case 0: // Personal
-        final formValid = _formKey.currentState!.validate();
+      case 0:
+        if (await FormScrollHelper.scrollToFirstInvalidField(
+          [_nameFieldKey, _dobFieldKey, _heightFieldKey, _weightFieldKey],
+          focusNodes: [_nameFocus, null, _heightFocus, _weightFocus],
+        )) {
+          return false;
+        }
+        if (_selectedDOB == null) {
+          await FormScrollHelper.reveal(_dobFieldKey);
+          return false;
+        }
         setState(() {
           _showGenderError = _selectedGender == null;
           _showBloodGroupError = _selectedBloodGroup == null;
         });
-        if (_selectedDOB == null) {
-          _showErrorSnackBar('Please select date of birth');
+        if (_selectedGender == null) {
+          await FormScrollHelper.reveal(_genderSectionKey);
           return false;
         }
-        return formValid && _selectedGender != null && _selectedBloodGroup != null;
-      case 1: // Contact
-        return _formKey.currentState!.validate();
-      case 2: // Emergency
-        return _formKey.currentState!.validate();
-      case 3: // Clinical
-        return true; // Allergies and conditions are optional
-      case 4: // Vitals
-        return _formKey.currentState!.validate();
+        if (_selectedBloodGroup == null) {
+          await FormScrollHelper.reveal(_bloodGroupSectionKey);
+          return false;
+        }
+        return true;
+      case 1:
+        return !(await FormScrollHelper.scrollToFirstInvalidField(
+          [_phoneFieldKey, _emailFieldKey, _addressFieldKey],
+          focusNodes: [_phoneFocus, _emailFocus, _addressFocus],
+        ));
+      case 2:
+        if (await FormScrollHelper.scrollToFirstInvalidField(
+          [_emergNameFieldKey, _emergPhoneFieldKey],
+          focusNodes: [_emergNameFocus, _emergPhoneFocus],
+        )) {
+          return false;
+        }
+        setState(() => _showRelationError = _selectedEmergencyRelation == null);
+        if (_selectedEmergencyRelation == null) {
+          await FormScrollHelper.reveal(_relationSectionKey);
+          return false;
+        }
+        return true;
+      case 3:
+        return true;
+      case 4:
+        return !(await FormScrollHelper.scrollToFirstInvalidField(
+          [_hrFieldKey, _bpFieldKey],
+          focusNodes: [_hrFocus, _bpFocus],
+        ));
       default:
         return true;
     }
@@ -203,7 +259,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   Future<void> _handleRegistration() async {
-    if (!_validateCurrentStep()) return;
+    if (!await _validateCurrentStep()) return;
 
     setState(() => _isLoading = true);
     FocusScope.of(context).unfocus();
@@ -372,7 +428,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       },
     );
     if (picked != null) {
-      setState(() => _selectedDOB = picked);
+      setState(() {
+        _selectedDOB = picked;
+        _dobDisplayController.text =
+            '${picked.day.toString().padLeft(2, '0')} / ${picked.month.toString().padLeft(2, '0')} / ${picked.year}';
+      });
     }
   }
 
@@ -406,6 +466,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               // Form Content
               Expanded(
                 child: SingleChildScrollView(
+                  controller: _scrollController,
                   physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Form(
@@ -592,13 +653,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             child: ElevatedButton(
               onPressed: _isLoading
                   ? null
-                  : () {
+                  : () async {
                       if (isLastStep) {
-                        _handleRegistration();
-                      } else {
-                        if (_validateCurrentStep()) {
-                          setState(() => _currentStep++);
-                        }
+                        await _handleRegistration();
+                      } else if (await _validateCurrentStep()) {
+                        setState(() => _currentStep++);
                       }
                     },
               style: ElevatedButton.styleFrom(
@@ -634,12 +693,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     return _buildStepCard(isDark, 'PATIENT DETAILS', [
       // Full Name
       TextFormField(
+        key: _nameFieldKey,
         controller: _nameController,
         focusNode: _nameFocus,
         keyboardType: TextInputType.name,
         textCapitalization: TextCapitalization.words,
         textInputAction: TextInputAction.next,
-        onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_heightFocus),
+        onFieldSubmitted: (_) =>
+            FormEnterNavigation.focusNext(context, _heightFocus),
         style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s'\-\.]")),
@@ -659,6 +720,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         onTap: _pickDateOfBirth,
         child: AbsorbPointer(
           child: TextFormField(
+            key: _dobFieldKey,
+            controller: _dobDisplayController,
+            readOnly: true,
             style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
             decoration: _buildInputDecoration(
               context: context,
@@ -667,11 +731,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               hint: 'Tap to select',
             ).copyWith(
               suffixIcon: Icon(Icons.calendar_month_rounded, color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5), size: 20),
-            ),
-            controller: TextEditingController(
-              text: _selectedDOB != null
-                  ? '${_selectedDOB!.day.toString().padLeft(2, '0')} / ${_selectedDOB!.month.toString().padLeft(2, '0')} / ${_selectedDOB!.year}'
-                  : '',
             ),
             validator: (_) => _selectedDOB == null ? 'Please select date of birth' : null,
           ),
@@ -684,11 +743,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         children: [
           Expanded(
             child: TextFormField(
+              key: _heightFieldKey,
               controller: _heightController,
               focusNode: _heightFocus,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               textInputAction: TextInputAction.next,
-              onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_weightFocus),
+              onFieldSubmitted: (_) =>
+                  FormEnterNavigation.focusNext(context, _weightFocus),
               style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
@@ -706,14 +767,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: TextFormField(
+              key: _weightFieldKey,
               controller: _weightController,
               focusNode: _weightFocus,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) {
-                FocusScope.of(context).unfocus();
-                _advanceStep();
-              },
+              onFieldSubmitted: (_) => FormEnterNavigation.onFieldDone(
+                context,
+                onSubmit: () => _advanceStep(),
+              ),
               style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
@@ -733,11 +795,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       const SizedBox(height: 24),
 
       // Gender
-      _buildGenderSelector(isDark).animate().fadeIn(delay: 340.ms, duration: 400.ms).slideX(begin: 0.08, end: 0),
+      KeyedSubtree(
+        key: _genderSectionKey,
+        child: _buildGenderSelector(isDark),
+      ).animate().fadeIn(delay: 340.ms, duration: 400.ms).slideX(begin: 0.08, end: 0),
       const SizedBox(height: 24),
 
       // Blood Group
-      _buildBloodGroupSelector(isDark).animate().fadeIn(delay: 420.ms, duration: 400.ms).slideX(begin: 0.08, end: 0),
+      KeyedSubtree(
+        key: _bloodGroupSectionKey,
+        child: _buildBloodGroupSelector(isDark),
+      ).animate().fadeIn(delay: 420.ms, duration: 400.ms).slideX(begin: 0.08, end: 0),
     ]);
   }
 
@@ -745,11 +813,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   Widget _buildContactInfoStep(bool isDark) {
     return _buildStepCard(isDark, 'CONTACT INFORMATION', [
       TextFormField(
+        key: _phoneFieldKey,
         controller: _phoneController,
         focusNode: _phoneFocus,
         keyboardType: TextInputType.phone,
         textInputAction: TextInputAction.next,
-        onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_emailFocus),
+        onFieldSubmitted: (_) =>
+            FormEnterNavigation.focusNext(context, _emailFocus),
         style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'[0-9+\- ]')),
@@ -766,11 +836,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       const SizedBox(height: 20),
 
       TextFormField(
+        key: _emailFieldKey,
         controller: _emailController,
         focusNode: _emailFocus,
         keyboardType: TextInputType.emailAddress,
         textInputAction: TextInputAction.next,
-        onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_addressFocus),
+        onFieldSubmitted: (_) =>
+            FormEnterNavigation.focusNext(context, _addressFocus),
         style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
         decoration: _buildInputDecoration(context: context, label: 'Email Address *', icon: Icons.email_rounded, hint: 'e.g. patient@example.com'),
         validator: (value) {
@@ -784,14 +856,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       const SizedBox(height: 20),
 
       TextFormField(
+        key: _addressFieldKey,
         controller: _addressController,
         focusNode: _addressFocus,
         keyboardType: TextInputType.streetAddress,
         textInputAction: TextInputAction.done,
-        onFieldSubmitted: (_) {
-          FocusScope.of(context).unfocus();
-          _advanceStep();
-        },
+        onFieldSubmitted: (_) => FormEnterNavigation.onFieldDone(
+          context,
+          onSubmit: () => _advanceStep(),
+        ),
         maxLines: 2,
         style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
         decoration: _buildInputDecoration(context: context, label: 'Address *', icon: Icons.location_on_rounded, hint: 'City, State, PIN Code'),
@@ -831,12 +904,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       const SizedBox(height: 20),
 
       TextFormField(
+        key: _emergNameFieldKey,
         controller: _emergencyNameController,
         focusNode: _emergNameFocus,
         keyboardType: TextInputType.name,
         textCapitalization: TextCapitalization.words,
         textInputAction: TextInputAction.next,
-        onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_emergPhoneFocus),
+        onFieldSubmitted: (_) =>
+            FormEnterNavigation.focusNext(context, _emergPhoneFocus),
         style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s'\-\.]"))],
         decoration: _buildInputDecoration(context: context, label: 'Contact Name *', icon: Icons.person_outline_rounded, hint: 'Full name'),
@@ -848,14 +923,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       const SizedBox(height: 20),
 
       TextFormField(
+        key: _emergPhoneFieldKey,
         controller: _emergencyPhoneController,
         focusNode: _emergPhoneFocus,
         keyboardType: TextInputType.phone,
         textInputAction: TextInputAction.done,
-        onFieldSubmitted: (_) {
-          FocusScope.of(context).unfocus();
-          _advanceStep();
-        },
+        onFieldSubmitted: (_) => FormEnterNavigation.onFieldDone(
+          context,
+          onSubmit: () => _advanceStep(),
+        ),
         style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'[0-9+\- ]')),
@@ -872,7 +948,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       const SizedBox(height: 20),
 
       // Relationship selector
-      _buildRelationshipSelector(isDark).animate().fadeIn(delay: 260.ms, duration: 400.ms).slideX(begin: 0.08, end: 0),
+      KeyedSubtree(
+        key: _relationSectionKey,
+        child: _buildRelationshipSelector(isDark),
+      ).animate().fadeIn(delay: 260.ms, duration: 400.ms).slideX(begin: 0.08, end: 0),
     ]);
   }
 
@@ -979,6 +1058,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             const SizedBox(height: 14),
             TextFormField(
               controller: _customAllergyController,
+              focusNode: _customAllergyFocus,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => FormEnterNavigation.onFieldDone(
+                context,
+                onSubmit: () => _advanceStep(),
+              ),
               style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
               decoration: _buildInputDecoration(context: context, label: 'Other Allergies', icon: Icons.add_circle_outline_rounded, hint: 'Separate with commas'),
             ),
@@ -1079,11 +1164,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
         _buildStepCard(isDark, 'INITIAL VITALS', [
           TextFormField(
+            key: _hrFieldKey,
             controller: _heartRateController,
             focusNode: _hrFocus,
             keyboardType: TextInputType.number,
             textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_bpFocus),
+            onFieldSubmitted: (_) =>
+                FormEnterNavigation.focusNext(context, _bpFocus),
             style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
             inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
             decoration: _buildInputDecoration(context: context, label: 'Heart Rate (bpm)', icon: Icons.favorite_outline_rounded, hint: 'e.g. 72'),
@@ -1097,14 +1184,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           const SizedBox(height: 20),
 
           TextFormField(
+            key: _bpFieldKey,
             controller: _bloodPressureController,
             focusNode: _bpFocus,
             keyboardType: TextInputType.text,
             textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) {
-              FocusScope.of(context).unfocus();
-              _handleRegistration();
-            },
+            onFieldSubmitted: (_) => FormEnterNavigation.onFieldDone(
+              context,
+              onSubmit: () => _handleRegistration(),
+            ),
             style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
             decoration: _buildInputDecoration(context: context, label: 'Blood Pressure', icon: Icons.speed_rounded, hint: 'e.g. 120/80'),
             validator: (value) {
@@ -1336,7 +1424,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           children: _relations.map((relation) {
             final isSelected = _selectedEmergencyRelation == relation;
             return GestureDetector(
-              onTap: () => setState(() => _selectedEmergencyRelation = relation),
+              onTap: () => setState(() {
+                _selectedEmergencyRelation = relation;
+                _showRelationError = false;
+              }),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1366,6 +1457,18 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             );
           }).toList(),
         ),
+        if (_showRelationError)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, left: 4.0),
+            child: Text(
+              'Please select relationship',
+              style: TextStyle(
+                color: Colors.red.shade600,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
       ],
     );
   }

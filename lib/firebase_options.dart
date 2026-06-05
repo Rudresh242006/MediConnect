@@ -33,9 +33,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.windows:
         return windows;
       case TargetPlatform.linux:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for Linux.',
-        );
+        return linux;
       default:
         throw UnsupportedError(
           'DefaultFirebaseOptions are not supported for this platform.',
@@ -56,11 +54,11 @@ class DefaultFirebaseOptions {
   );
 
   // ── iOS ────────────────────────────────────────────────────────────────────
+  // Add an iOS app in Firebase Console, then run: flutterfire configure
   static const FirebaseOptions ios = FirebaseOptions(
-    // TODO: Replace with values from ios/Runner/GoogleService-Info.plist
-    apiKey: 'YOUR_IOS_API_KEY',
-    appId: 'YOUR_IOS_APP_ID',
-    messagingSenderId: 'YOUR_SENDER_ID',
+    apiKey: 'AIzaSyAS1txeJ0S3aH_JSZ3It4nsIoVIAFZThz4',
+    appId: '1:12644297251:android:67224f39998acf277e1f96',
+    messagingSenderId: '12644297251',
     projectId: 'mediconnect-26',
     storageBucket: 'mediconnect-26.firebasestorage.app',
     databaseURL:
@@ -70,10 +68,9 @@ class DefaultFirebaseOptions {
 
   // ── macOS ──────────────────────────────────────────────────────────────────
   static const FirebaseOptions macos = FirebaseOptions(
-    // TODO: Replace with values from macOS Firebase app
-    apiKey: 'YOUR_MACOS_API_KEY',
-    appId: 'YOUR_MACOS_APP_ID',
-    messagingSenderId: 'YOUR_SENDER_ID',
+    apiKey: 'AIzaSyAS1txeJ0S3aH_JSZ3It4nsIoVIAFZThz4',
+    appId: '1:12644297251:android:67224f39998acf277e1f96',
+    messagingSenderId: '12644297251',
     projectId: 'mediconnect-26',
     storageBucket: 'mediconnect-26.firebasestorage.app',
     databaseURL:
@@ -95,6 +92,18 @@ class DefaultFirebaseOptions {
 
   // ── Windows ────────────────────────────────────────────────────────────────
   static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyAS1txeJ0S3aH_JSZ3It4nsIoVIAFZThz4',
+    appId: '1:12644297251:android:67224f39998acf277e1f96',
+    messagingSenderId: '12644297251',
+    projectId: 'mediconnect-26',
+    storageBucket: 'mediconnect-26.firebasestorage.app',
+    databaseURL:
+        'https://mediconnect-26-default-rtdb.asia-southeast1.firebasedatabase.app',
+    authDomain: 'mediconnect-26.firebaseapp.com',
+  );
+
+  // ── Linux ────────────────────────────────────────────────────────────────────
+  static const FirebaseOptions linux = FirebaseOptions(
     apiKey: 'AIzaSyAS1txeJ0S3aH_JSZ3It4nsIoVIAFZThz4',
     appId: '1:12644297251:android:67224f39998acf277e1f96',
     messagingSenderId: '12644297251',

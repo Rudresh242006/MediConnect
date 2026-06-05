@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/patient.dart';
 import '../services/id_service.dart';
+import '../utils/form_enter_navigation.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -26,6 +27,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _emergencyNameController;
   late TextEditingController _emergencyPhoneController;
   String _emergencyRelation = 'Spouse';
+
+  final _phoneFocus = FocusNode();
+  final _emailFocus = FocusNode();
+  final _addressFocus = FocusNode();
+  final _emergencyNameFocus = FocusNode();
+  final _emergencyPhoneFocus = FocusNode();
 
   final List<String> _relationships = [
     'Spouse',
@@ -58,6 +65,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _addressController.dispose();
     _emergencyNameController.dispose();
     _emergencyPhoneController.dispose();
+    _phoneFocus.dispose();
+    _emailFocus.dispose();
+    _addressFocus.dispose();
+    _emergencyNameFocus.dispose();
+    _emergencyPhoneFocus.dispose();
     super.dispose();
   }
 
@@ -448,6 +460,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           _buildTextField(
             controller: _phoneController,
+            focusNode: _phoneFocus,
+            textInputAction: TextInputAction.next,
+            onFieldSubmitted: (_) =>
+                FormEnterNavigation.focusNext(context, _emailFocus),
             label: 'Phone Number',
             hint: 'e.g. +91 98765 43210',
             icon: Icons.phone_rounded,
@@ -469,6 +485,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 18),
           _buildTextField(
             controller: _emailController,
+            focusNode: _emailFocus,
+            textInputAction: TextInputAction.next,
+            onFieldSubmitted: (_) =>
+                FormEnterNavigation.focusNext(context, _addressFocus),
             label: 'Email Address',
             hint: 'e.g. patient@example.com',
             icon: Icons.email_rounded,
@@ -488,6 +508,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 18),
           _buildTextField(
             controller: _addressController,
+            focusNode: _addressFocus,
+            textInputAction: TextInputAction.next,
+            onFieldSubmitted: (_) =>
+                FormEnterNavigation.focusNext(context, _emergencyNameFocus),
             label: 'Physical Address',
             hint: 'Street, City, State, ZIP',
             icon: Icons.home_rounded,
@@ -529,6 +553,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           _buildTextField(
             controller: _emergencyNameController,
+            focusNode: _emergencyNameFocus,
+            textInputAction: TextInputAction.next,
+            onFieldSubmitted: (_) =>
+                FormEnterNavigation.focusNext(context, _emergencyPhoneFocus),
             label: 'Emergency Contact Name',
             hint: 'Full Name of contact',
             icon: Icons.person_rounded,
@@ -543,6 +571,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 18),
           _buildTextField(
             controller: _emergencyPhoneController,
+            focusNode: _emergencyPhoneFocus,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => FormEnterNavigation.onFieldDone(
+              context,
+              onSubmit: () => _saveProfile(),
+            ),
             label: 'Emergency Phone Number',
             hint: 'Phone number of contact',
             icon: Icons.phone_android_rounded,
@@ -629,11 +663,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     TextInputType keyboardType = TextInputType.text,
     List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
+    FocusNode? focusNode,
+    TextInputAction? textInputAction,
+    void Function(String)? onFieldSubmitted,
   }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      textInputAction: textInputAction,
+      onFieldSubmitted: onFieldSubmitted,
       inputFormatters: inputFormatters,
       validator: validator,
       style: TextStyle(
